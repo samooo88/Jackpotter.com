@@ -147,34 +147,72 @@
   </div>
 
   <script>
-    document.getElementById('year').textContent = new Date().getFullYear();
-  </script>
-  <script>
-  // starting number
-  let count = 1452;
+  // --- CONFIG ---
+  const START_COUNT = 1452; // what your counter started at
+  // Set this to the moment you want counting to begin (ISO 8601). Use +08:00 for Manila.
+  // Example: Sep 8, 2025 at 10:00 AM Manila time
+  const LAUNCH_ISO  = "2025-09-08T10:00:00+08:00";
 
-  // update the counter visually
-  function updateCounter() {
-    document.getElementById("visitorCount").textContent = count.toString().padStart(9, "0");
+  // --- UTILS ---
+  const padLen = 9; // show as 9 digits with leading zeros
+  const el = document.getElementById("visitorCount");
+  const launch = new Date(LAUNCH_ISO);
+
+  // Simple deterministic PRNG based on an integer seed (hour index)
+  function prng01(n) {
+    // mix bits (xorshift-ish)
+    let x = (n ^ 0x9e3779b9) >>> 0;
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    return (x >>> 0) / 4294967295; // 0..1
   }
 
-  // pick a random increment between 10–100 every ~hour
-  function scheduleIncrement() {
-    let increment = Math.floor(Math.random() * 91) + 10; // 10–100
-    let delay = Math.floor(Math.random() * (60 - 30 + 1) + 30) * 60 * 1000; // 30–60 min
-    setTimeout(() => {
-      count += increment;
-      updateCounter();
-      scheduleIncrement(); // schedule next increment
-    }, delay);
+  // Deterministic hourly increment: 10..100
+  function hourlyIncrement(hourIndex) {
+    return 10 + Math.floor(prng01(hourIndex) * 91);
   }
 
-  // init
-  updateCounter();
-  scheduleIncrement();
+  function hoursSinceLaunch(now = new Date()) {
+    const ms = now - launch;
+    return ms < 0 ? 0 : Math.floor(ms / 3600000); // full hours elapsed
+  }
+
+  function totalIncrementsUpToHour(h) {
+    // Sum increments for each elapsed hour [0..h-1]
+    let sum = 0;
+    for (let i = 0; i < h; i++) sum += hourlyIncrement(i);
+    return sum;
+  }
+
+  function computeCount(now = new Date()) {
+    const h = hoursSinceLaunch(now);
+    return START_COUNT + totalIncrementsUpToHour(h);
+  }
+
+  function render() {
+    const n = computeCount(new Date());
+    el.textContent = n.toString().padStart(padLen, "0");
+  }
+
+  function msUntilNextHour(now = new Date()) {
+    const next = new Date(now);
+    next.setMinutes(0, 0, 0);
+    next.setHours(next.getHours() + 1);
+    return next - now;
+  }
+
+  // Initial paint
+  render();
+
+  // Align the first update to the top of the next hour,
+  // then update exactly every hour after that.
+  setTimeout(() => {
+    render();
+    setInterval(render, 60 * 60 * 1000); // every hour
+  }, msUntilNextHour());
 </script>
 </body>
 </html>
+
 
 
 
